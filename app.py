@@ -26,42 +26,71 @@ def wake_up_app(app):
                     # App is sleeping, attempt to wake it up
                     wake_response = requests.get(url, params={"rerun": "true"}, timeout=15)
                     if wake_response.status_code == 200 and "Yes, get this app back up!" not in wake_response.text:
-                        return f"{name} was sleeping and has been successfully awakened!"
+                        return "awakened"
                     else:
-                        return f"{name} is sleeping, but wake-up attempt was unsuccessful. Status: {wake_response.status_code}"
+                        return "sleeping"
                 else:
-                    return f"{name} is already awake and running!"
+                    return "awake"
             else:
-                return f"Failed to access {name}. Status code: {response.status_code}"
-        except requests.exceptions.RequestException as e:
+                return "error"
+        except requests.exceptions.RequestException:
             if attempt == max_retries - 1:
-                return f"Error accessing {name}: {str(e)}"
+                return "error"
         
         time.sleep(delay)
         delay *= 2  # Exponential backoff
 
-    return f"Failed to wake up {name} after {max_retries} attempts. The app might be offline or require manual intervention."
+    return "error"
 
 st.title("Streamlit App Awakener")
 
-if st.button("GET-UP KLM"):
-    progress_bar = st.progress(0)
-    status_placeholders = [st.empty() for _ in applications]
+if 'app_states' not in st.session_state:
+    st.session_state.app_states = {app['name']: 'unknown' for app in applications}
 
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        future_to_app = {executor.submit(wake_up_app, app): app for app in applications}
+if 'loading' not in st.session_state:
+    st.session_state.loading = {app['name']: False for app in applications}
+
+def restart_app(app_name):
+    st.session_state.loading[app_name] = True
+    st.session_state.app_states[app_name] = 'unknown'
+    st.experimental_rerun()
+
+cols = st.columns(len(applications))
+
+for i, app in enumerate(applications):
+    with cols[i]:
+        st.subheader(app['name'])
         
-        for i, future in enumerate(concurrent.futures.as_completed(future_to_app)):
-            app = future_to_app[future]
-            result = future.result()
-            status_placeholders[i].write(result)
-            if "successfully awakened" in result or "already awake" in result:
-                status_placeholders[i].success(f"[Open {app['name']}]({app['url']})")
-            else:
-                status_placeholders[i].warning(result)
-            progress_bar.progress((i + 1) / len(applications))
+        if st.session_state.loading[app['name']]:
+            status = wake_up_app(app)
+            st.session_state.app_states[app['name']] = status
+            st.session_state.loading[app['name']] = False
 
-    st.success("All wake-up attempts completed!")
+        if st.session_state.app_states[app['name']] == 'unknown':
+            st.info("Status unknown")
+        elif st.session_state.app_states[app['name']] == 'awake':
+            st.success("Awake and running")
+        elif st.session_state.app_states[app['name']] == 'awakened':
+            st.success("Successfully awakened")
+        elif st.session_state.app_states[app['name']] == 'sleeping':
+            st.warning("Sleeping, wake-up failed")
+        else:
+            st.error("Error accessing app")
 
-st.write("Click the button above to attempt waking up all applications.")
+        st.markdown(f"[Open App]({app['url']})")
+        
+        if st.button(f"Restart {app['name']}", key=f"restart_{app['name']}"):
+            restart_app(app['name'])
+
+        if st.session_state.loading[app['name']]:
+            st.write("Loading...")
+            st.spinner()
+
+if st.button("Restart All Apps"):
+    for app in applications:
+        st.session_state.loading[app['name']] = True
+        st.session_state.app_states[app['name']] = 'unknown'
+    st.experimental_rerun()
+
+st.write("Click on individual 'Restart' buttons or 'Restart All Apps' to attempt waking up the applications.")
 st.write("Note: If apps remain unresponsive, they might require manual intervention or be temporarily offline.")
