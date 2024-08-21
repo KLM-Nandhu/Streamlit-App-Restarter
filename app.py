@@ -1,12 +1,7 @@
 import streamlit as st
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
+import requests
 import time
+import concurrent.futures
 
 # List of applications with their URLs and names
 applications = [
@@ -17,44 +12,44 @@ applications = [
     {"url": "https://gallo-buddy.streamlit.app/", "name": "Gallo Buddy"}
 ]
 
-def wake_up_app(driver, app):
+def wake_up_app(app):
     url = app['url']
     name = app['name']
-    
-    try:
-        driver.get(url)
-        # Wait for the "Yes, get this app back up!" button to appear
-        wake_button = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.XPATH, "//button[contains(text(), 'Yes, get this app back up!')]"))
-        )
-        wake_button.click()
-        
-        # Wait for the app to load (you might need to adjust this based on the specific app)
-        WebDriverWait(driver, 30).until(
-            EC.presence_of_element_located((By.TAG_NAME, "body"))
-        )
-        
-        return f"{name} is now awake!"
-    except TimeoutException:
-        return f"{name} is already awake or couldn't be awakened."
+    max_retries = 3
+    delay = 2
+
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                return f"{name} is now awake!"
+        except requests.exceptions.RequestException:
+            pass
+
+        time.sleep(delay)
+        delay *= 2  # Exponential backoff
+
+    return f"Failed to wake up {name}. Please try manually."
 
 st.title("Streamlit App Awakener")
 
 if st.button("GET-UP KLM you ready for the war"):
-    # Setup Selenium WebDriver using webdriver_manager
-    options = webdriver.ChromeOptions()
-    options.add_argument('--headless')  # Run in headless mode
-    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-    
-    for app in applications:
-        status = wake_up_app(driver, app)
-        if "awake" in status:
-            st.success(status)
-            st.markdown(f"[Open {app['name']}]({app['url']})")
-        else:
-            st.warning(status)
-        time.sleep(2)  # Add a small delay between each app awakening attempt
-    
-    driver.quit()
+    progress_bar = st.progress(0)
+    status_placeholders = [st.empty() for _ in applications]
 
-st.write("Click the button above to wake up all applications.")
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future_to_app = {executor.submit(wake_up_app, app): app for app in applications}
+        
+        for i, future in enumerate(concurrent.futures.as_completed(future_to_app)):
+            app = future_to_app[future]
+            result = future.result()
+            status_placeholders[i].write(result)
+            if "awake" in result:
+                status_placeholders[i].success(f"[Open {app['name']}]({app['url']})")
+            else:
+                status_placeholders[i].error(result)
+            progress_bar.progress((i + 1) / len(applications))
+
+    st.success("All wake-up attempts completed!")
+
+st.write("Click the button above to attempt waking up all applications.")
