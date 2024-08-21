@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import time
+import concurrent.futures
 
 # List of applications with their URLs and names
 applications = [
@@ -11,41 +12,54 @@ applications = [
     {"url": "https://gallo-buddy.streamlit.app/", "name": "Gallo Buddy"}
 ]
 
-def wake_up_app(url, max_retries=3, timeout=20):
+def wake_up_app(app):
+    url = app['url']
+    name = app['name']
+    max_retries = 3
+    delay = 2
+
     for attempt in range(max_retries):
         try:
-            response = requests.get(url, timeout=timeout)
+            response = requests.get(url, timeout=10)
             if response.status_code == 200:
-                return True
-        except requests.exceptions.RequestException:
-            st.write(f"Attempt {attempt + 1} failed. Retrying...")
-            time.sleep(5)  # Wait 5 seconds before retrying
-    return False
+                # Check if the page content indicates it's awake
+                if "Streamlit" in response.text and "Yes, get this app back up!" not in response.text:
+                    return f"{name} is now awake!"
+                elif "Yes, get this app back up!" in response.text:
+                    # Simulate clicking the button by sending another request
+                    requests.get(url, timeout=10)
+                    time.sleep(5)  # Wait for the app to potentially wake up
+                    return f"Attempted to wake up {name}. Please check manually."
+            else:
+                return f"Failed to wake up {name}. Status code: {response.status_code}"
+        except requests.exceptions.RequestException as e:
+            if attempt == max_retries - 1:
+                return f"Error waking up {name}: {str(e)}"
+        
+        time.sleep(delay)
+        delay *= 2  # Exponential backoff
 
-st.title("Streamlit App Restarter")
+    return f"Failed to wake up {name} after {max_retries} attempts."
+
+st.title("Streamlit App Awakener")
 
 if st.button("GET-UP KLM you ready for the war"):
-    for app in applications:
-        st.write(f"Waking up {app['name']}...")
-        if wake_up_app(app['url']):
-            st.success(f"{app['name']} is now awake!")
-            st.markdown(f"[Open {app['name']}]({app['url']})")
-        else:
-            st.error(f"Failed to wake up {app['name']} after multiple attempts. Please try manually.")
-        time.sleep(5)  # Increased delay between app wake-up attempts
-    
-    # Attempt to refresh the page after all wake-up attempts
-    st.experimental_rerun()
+    progress_bar = st.progress(0)
+    status_placeholders = [st.empty() for _ in applications]
 
-st.write("Click the button above to wake up all applications.")
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future_to_app = {executor.submit(wake_up_app, app): app for app in applications}
+        
+        for i, future in enumerate(concurrent.futures.as_completed(future_to_app)):
+            app = future_to_app[future]
+            result = future.result()
+            status_placeholders[i].write(result)
+            if "awake" in result.lower():
+                status_placeholders[i].success(f"[Open {app['name']}]({app['url']})")
+            else:
+                status_placeholders[i].warning(result)
+            progress_bar.progress((i + 1) / len(applications))
 
-# Display all app links, regardless of wake-up status
-st.subheader("All Application Links:")
-for app in applications:
-    st.markdown(f"[{app['name']}]({app['url']})")
+    st.success("All wake-up attempts completed!")
 
-# Add some information about potential limitations
-st.info("""
-Note: The ability to wake up apps may be limited by their hosting setup. 
-If an app doesn't wake up automatically, you may need to click its link and wake it up manually.
-""")
+st.write("Click the button above to attempt waking up all applications.")
