@@ -1,5 +1,7 @@
 import streamlit as st
 from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -39,10 +41,10 @@ def wake_up_app(driver, app):
 st.title("Streamlit App Awakener")
 
 if st.button("GET-UP KLM you ready for the war"):
-    # Setup Selenium WebDriver (you'll need to have ChromeDriver installed and in your PATH)
+    # Setup Selenium WebDriver using webdriver_manager
     options = webdriver.ChromeOptions()
     options.add_argument('--headless')  # Run in headless mode
-    driver = webdriver.Chrome(options=options)
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
     
     for app in applications:
         status = wake_up_app(driver, app)
