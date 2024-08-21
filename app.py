@@ -20,30 +20,31 @@ def wake_up_app(app):
 
     for attempt in range(max_retries):
         try:
-            response = requests.get(url, timeout=10)
+            response = requests.get(url, timeout=15)
             if response.status_code == 200:
-                # Check if the page content indicates it's awake
-                if "Streamlit" in response.text and "Yes, get this app back up!" not in response.text:
-                    return f"{name} is now awake!"
-                elif "Yes, get this app back up!" in response.text:
-                    # Simulate clicking the button by sending another request
-                    requests.get(url, timeout=10)
-                    time.sleep(5)  # Wait for the app to potentially wake up
-                    return f"Attempted to wake up {name}. Please check manually."
+                if "Yes, get this app back up!" in response.text:
+                    # App is sleeping, attempt to wake it up
+                    wake_response = requests.get(url, params={"rerun": "true"}, timeout=15)
+                    if wake_response.status_code == 200 and "Yes, get this app back up!" not in wake_response.text:
+                        return f"{name} was sleeping and has been successfully awakened!"
+                    else:
+                        return f"{name} is sleeping, but wake-up attempt was unsuccessful. Status: {wake_response.status_code}"
+                else:
+                    return f"{name} is already awake and running!"
             else:
-                return f"Failed to wake up {name}. Status code: {response.status_code}"
+                return f"Failed to access {name}. Status code: {response.status_code}"
         except requests.exceptions.RequestException as e:
             if attempt == max_retries - 1:
-                return f"Error waking up {name}: {str(e)}"
+                return f"Error accessing {name}: {str(e)}"
         
         time.sleep(delay)
         delay *= 2  # Exponential backoff
 
-    return f"Failed to wake up {name} after {max_retries} attempts."
+    return f"Failed to wake up {name} after {max_retries} attempts. The app might be offline or require manual intervention."
 
 st.title("Streamlit App Awakener")
 
-if st.button("GET-UP KLM you ready for the war"):
+if st.button("GET-UP KLM"):
     progress_bar = st.progress(0)
     status_placeholders = [st.empty() for _ in applications]
 
@@ -54,7 +55,7 @@ if st.button("GET-UP KLM you ready for the war"):
             app = future_to_app[future]
             result = future.result()
             status_placeholders[i].write(result)
-            if "awake" in result.lower():
+            if "successfully awakened" in result or "already awake" in result:
                 status_placeholders[i].success(f"[Open {app['name']}]({app['url']})")
             else:
                 status_placeholders[i].warning(result)
@@ -63,3 +64,4 @@ if st.button("GET-UP KLM you ready for the war"):
     st.success("All wake-up attempts completed!")
 
 st.write("Click the button above to attempt waking up all applications.")
+st.write("Note: If apps remain unresponsive, they might require manual intervention or be temporarily offline.")
