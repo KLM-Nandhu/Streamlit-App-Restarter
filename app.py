@@ -42,7 +42,7 @@ def wake_up_app(app):
 
     return f"Failed to wake up {name} after {max_retries} attempts. Manual intervention may be needed."
 
-st.title("Streamlit App Awakener")
+st.title("Don't Sleep")
 
 if 'awakening_in_progress' not in st.session_state:
     st.session_state.awakening_in_progress = False
@@ -50,7 +50,7 @@ if 'awakening_in_progress' not in st.session_state:
 if 'results' not in st.session_state:
     st.session_state.results = []
 
-if st.button("GET-UP KLM you ready for the war", disabled=st.session_state.awakening_in_progress):
+if st.button("GET-UP KLM ", disabled=st.session_state.awakening_in_progress):
     st.session_state.awakening_in_progress = True
     st.session_state.results = []
     
