@@ -87,4 +87,3 @@ if st.session_state.results:
         st.markdown(f"[{app['name']}]({app['url']})")
 
 st.write("Click the button above to attempt waking up all applications.")
-st.write("Note: If apps remain unresponsive, they might require manual intervention or be temporarily offline.")
